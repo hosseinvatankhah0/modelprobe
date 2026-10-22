@@ -73,29 +73,72 @@ npx modelprober --provider openrouter --free-only
 ## Sample output
 
 ```
-━━━ openrouter  https://openrouter.ai/api/v1 ━━━
-  لیست مدل‌ها: 312 عدد  https://openrouter.ai/api/v1/models
-  تست 40 مدل با 8 درخواست موازی ...
+--- openrouter  https://openrouter.ai/api/v1 ---
+  Discovered 312 models  https://openrouter.ai/api/v1/models
+  Testing 40 models with 8 parallel workers ...
 
-  #  MODEL                             STATUS        VERDICT        FREE    PRICE                      TIME  DETAIL
+  #  MODEL                             BENCH   STATUS        VERDICT        FREE   PRICE                      TIME  DETAIL
 --------------------------------------------------------------------------------------------------------------
-  1  deepseek/deepseek-chat-v3-0324    OK           USABLE         paid    in 0.14/1M · out 0.28/1M     712ms  ok
-  2  meta-llama/llama-3.3-70b:free     OK           USABLE         FREE    in 0/1M · out 0/1M            480ms  ok
-  3  qwen/qwen-2.5-7b-instruct         RATE-LIMIT   USABLE*        ?      ?                          120ms  Rate limit exceeded
-  4  some/paid-model                   NO-CREDIT    NEED-BAL       paid    in 3/1M · out 15/1M            95ms  insufficient balance
-  5  vendor/ghost-model                BAD-REQ      UNAVAILABLE    ?      ?                           88ms  model not found
+  1  anthropic/claude-sonnet-4        1430    OK            USABLE         paid   in 3/1M · out 15/1M        712ms  ok
+  2  deepseek/deepseek-r1             1395    OK            USABLE         paid   in 0.55/1M · out 2.19/1M    640ms  ok
+  3  meta-llama/llama-3.3-70b:free    1245    OK            USABLE         FREE   in 0/1M · out 0/1M          480ms  ok
+  4  qwen/qwen-2.5-7b-instruct        1170    RATE-LIMIT    USABLE*        ?      ?                          120ms  Rate limit exceeded
+  5  some/paid-model                  1240    NO-CREDIT     NEED-BAL       paid   in 3/1M · out 15/1M            95ms  insufficient balance
+  6  vendor/ghost-model               ~1180   BAD-REQ       UNAVAILABLE    ?      ?                           88ms  model not found
 
-— خلاصه —
+- Summary -
   OK                     2
   RATE-LIMIT             1
   NO-CREDIT              1
   BAD-REQ                1
 
-  قابل استفاده: 3   |  رایگان: 1   |  کل: 5
+  Usable: 3   |  Free: 1   |  Total: 6
 
-  مدل‌های رایگانِ قابل استفاده:
-    ✓ meta-llama/llama-3.3-70b:free
+  Best models by benchmark score:
+    1430    anthropic/claude-sonnet-4  712ms
+    1395    deepseek/deepseek-r1  640ms
+    1245    meta-llama/llama-3.3-70b:free [FREE]  480ms
+
+  Free + usable models:
+    + meta-llama/llama-3.3-70b:free
+
+  Paid + usable models:
+    * anthropic/claude-sonnet-4
+    * deepseek/deepseek-r1
 ```
+
+---
+
+## Benchmark ranking (BENCH column)
+
+Results are **sorted by model capability first, response speed second**, so the strongest model
+that actually answers shows up at the top.
+
+- The `BENCH` column is an Elo-style capability score from a bundled snapshot of public
+  leaderboards (`src/benchmarks.json`, ~120 model families).
+- `~` means the model is **not** in the dataset and the score is a heuristic estimate based on
+  family/size hints (`70b` > `8b`, `pro` > `mini`, `preview` gets a penalty, ...).
+- Override or extend the scores with your own file:
+
+```json
+{
+  "my-provider/my-best-model": 1500,
+  "gpt-4o": 1360
+}
+```
+
+```bash
+npx modelprober --provider openrouter --rank-file ./ranks.json
+```
+
+### Sort modes
+
+| `--sort` | Order |
+|---|---|
+| `bench` (default) | strongest first, ties broken by response speed |
+| `speed` | fastest response first |
+| `name` | alphabetical |
+| `free` | free models first, then strongest, then fastest |
 
 ---
 
@@ -123,7 +166,7 @@ Only `USABLE` and `USABLE*` models are safe to use.
 2. **Model name** — names containing `:free` / `free` are treated as free (OpenRouter convention).
 3. **Otherwise** → `?` (unknown). Use `--free-pattern <regex>` to add your own rule.
 
-Pricing is normalized to **per 1M tokens** in the table and in the JSON/CSV reports.
+Pricing is normalized to **per 1M tokens** in the table and in the JSON report.
 
 ---
 
@@ -144,6 +187,8 @@ Pricing is normalized to **per 1M tokens** in the table and in the JSON/CSV repo
     --skip <re>          Drop models matching the regex
     --limit <n>          Max number of models to test
     --include-non-chat   Also test embedding / tts / image models
+    --sort <mode>        bench (default) | speed | name | free
+    --rank-file <file>   Custom benchmark scores as JSON {"model-id": 1350}
     --prompt <text>      Test prompt (default: "Reply with exactly: OK")
     --max-tokens <n>     Max tokens for the test request
     --timeout <ms>       Per-request timeout
@@ -151,7 +196,6 @@ Pricing is normalized to **per 1M tokens** in the table and in the JSON/CSV repo
     --retries <n>        Retries on 429/5xx
     --show-response      Print the model's short answer
     --json <file>        Write a JSON report
-    --csv <file>         Write a CSV report
     --report-dir <dir>   Where reports are stored (default: ~/.modelprobe/reports)
     --no-report          Do not write reports
 -i, --interactive        Force interactive mode
@@ -189,10 +233,12 @@ Priority:
 
 ## Reports
 
-Every run writes two files to `~/.modelprobe/reports/` (override with `--report-dir`):
+Every run writes a single JSON report to `~/.modelprobe/reports/` (override with `--report-dir`):
 
-- `<provider>-<timestamp>.json` — full detail (status, latency, pricing, free flag, response)
-- `<provider>-<timestamp>.csv` — one row per model, Excel/Sheets friendly (UTF-8 BOM)
+- `<provider>-<timestamp>.json` — full detail (status, verdict, latency, pricing, free flag,
+  benchmark score, response text)
+
+No CSV is produced; use `--json <file>` if you want the report somewhere specific.
 
 ---
 
@@ -236,10 +282,14 @@ console.log(report.results.filter((r) => r.status === 'ok'));
 ## فارسی (خلاصه)
 
 - `npx modelprober` → به‌صورت تعاملی آدرس و کلید رو می‌پرسه (کلید پنهان تایپ میشه).
-- خروجی جدول: وضعیت هر مدل، اینکه رایگانه یا نه، قیمت هر ۱ میلیون توکن، و زمان پاسخ.
+- **خروجی کاملاً انگلیسیه** (برای جلوگیری از به‌هم‌ریختگی جدول‌ها به‌خاطر راست‌به‌چپ بودن).
+- ستون `BENCH` = امتیاز توانمندی مدل (سبک Elo). `~` یعنی مدل توی دیتاست داخلی نیست و امتیازش تخمینیه.
+- خروجی بر اساس **قدرت مدل** سورت میشه و در امتیاز برابر، **سریع‌ترین** مدل بالاتر میاد.
+  با `--sort speed|name|free` میشه حالت دیگه انتخاب کرد.
+- با `--rank-file ranks.json` میشه امتیازهای دلخواه خودت رو جایگزین کنی.
 - فقط مدل‌های `USABLE` و `USABLE*` قابل استفاده‌ان.
-- گزارش JSON/CSV توی `~/.modelprobe/reports/` ذخیره میشه.
-- نسخه‌ی پایتون هم توی پوشه‌ی [`python/`](./python) هست (بدون npm).
+- فقط گزارش **JSON** ساخته میشه (CSV حذف شده) — توی `~/.modelprobe/reports/`.
+- نسخه‌ی پایتون هم توی پوشه‌ی [`python/`](./python) هست (بدون npm، همون امکانات).
 
 ---
 

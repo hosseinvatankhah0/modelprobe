@@ -1,0 +1,480 @@
+[
+  {
+    "pattern": "gpt-5(\\.\\d+)?-?(mini|nano|pro)?",
+    "score": 1440,
+    "label": "GPT-5 class"
+  },
+  {
+    "pattern": "gpt-4\\.1-nano",
+    "score": 1265
+  },
+  {
+    "pattern": "gpt-4\\.1-mini",
+    "score": 1330
+  },
+  {
+    "pattern": "gpt-4\\.1",
+    "score": 1400
+  },
+  {
+    "pattern": "gpt-4o-mini",
+    "score": 1290
+  },
+  {
+    "pattern": "gpt-4o-audio",
+    "score": 1240
+  },
+  {
+    "pattern": "gpt-4o",
+    "score": 1360
+  },
+  {
+    "pattern": "gpt-4-turbo",
+    "score": 1355
+  },
+  {
+    "pattern": "gpt-4-32k",
+    "score": 1330
+  },
+  {
+    "pattern": "gpt-4",
+    "score": 1325
+  },
+  {
+    "pattern": "gpt-3\\.5-turbo",
+    "score": 1160
+  },
+  {
+    "pattern": "gpt-3\\.5",
+    "score": 1140
+  },
+  {
+    "pattern": "o4-mini",
+    "score": 1380
+  },
+  {
+    "pattern": "o3-mini",
+    "score": 1330
+  },
+  {
+    "pattern": "o3",
+    "score": 1420
+  },
+  {
+    "pattern": "o1-mini",
+    "score": 1280
+  },
+  {
+    "pattern": "o1-preview",
+    "score": 1330
+  },
+  {
+    "pattern": "o1",
+    "score": 1390
+  },
+  {
+    "pattern": "gpt-oss-120b",
+    "score": 1250
+  },
+  {
+    "pattern": "gpt-oss-20b",
+    "score": 1180
+  },
+  {
+    "pattern": "claude-(opus|sonnet)-4",
+    "score": 1430,
+    "label": "Claude 4 class"
+  },
+  {
+    "pattern": "claude-3\\.7-sonnet",
+    "score": 1385
+  },
+  {
+    "pattern": "claude-3\\.5-sonnet",
+    "score": 1330
+  },
+  {
+    "pattern": "claude-3-opus",
+    "score": 1300
+  },
+  {
+    "pattern": "claude-3\\.5-haiku",
+    "score": 1240
+  },
+  {
+    "pattern": "claude-3-haiku",
+    "score": 1150
+  },
+  {
+    "pattern": "claude-3",
+    "score": 1290
+  },
+  {
+    "pattern": "claude-2",
+    "score": 1180
+  },
+  {
+    "pattern": "claude-instant",
+    "score": 1100
+  },
+  {
+    "pattern": "gemini-2\\.5-pro",
+    "score": 1450
+  },
+  {
+    "pattern": "gemini-2\\.5-flash",
+    "score": 1350
+  },
+  {
+    "pattern": "gemini-2\\.0-flash",
+    "score": 1300
+  },
+  {
+    "pattern": "gemini-1\\.5-pro",
+    "score": 1320
+  },
+  {
+    "pattern": "gemini-1\\.5-flash",
+    "score": 1250
+  },
+  {
+    "pattern": "gemini-3",
+    "score": 1420
+  },
+  {
+    "pattern": "gemini",
+    "score": 1250
+  },
+  {
+    "pattern": "gemma-3-27b",
+    "score": 1230
+  },
+  {
+    "pattern": "gemma-3",
+    "score": 1190
+  },
+  {
+    "pattern": "gemma-2-27b",
+    "score": 1210
+  },
+  {
+    "pattern": "gemma",
+    "score": 1120
+  },
+  {
+    "pattern": "llama-4-maverick",
+    "score": 1340
+  },
+  {
+    "pattern": "llama-4-scout",
+    "score": 1300
+  },
+  {
+    "pattern": "llama-3\\.3-70b",
+    "score": 1245
+  },
+  {
+    "pattern": "llama-3\\.1-405b",
+    "score": 1280
+  },
+  {
+    "pattern": "llama-3\\.1-70b",
+    "score": 1230
+  },
+  {
+    "pattern": "llama-3\\.1-8b",
+    "score": 1150
+  },
+  {
+    "pattern": "llama-3\\.2",
+    "score": 1180
+  },
+  {
+    "pattern": "llama-3",
+    "score": 1150
+  },
+  {
+    "pattern": "llama-4",
+    "score": 1300
+  },
+  {
+    "pattern": "codellama",
+    "score": 1080
+  },
+  {
+    "pattern": "llama",
+    "score": 1100
+  },
+  {
+    "pattern": "deepseek-r1-0528",
+    "score": 1400
+  },
+  {
+    "pattern": "deepseek-r1-distill-?(qwen)?-?32b",
+    "score": 1250
+  },
+  {
+    "pattern": "deepseek-r1-distill-?(qwen)?-?14b",
+    "score": 1180
+  },
+  {
+    "pattern": "deepseek-r1-distill",
+    "score": 1150
+  },
+  {
+    "pattern": "deepseek-r1",
+    "score": 1395
+  },
+  {
+    "pattern": "deepseek-v3\\.1",
+    "score": 1370
+  },
+  {
+    "pattern": "deepseek-v3",
+    "score": 1355
+  },
+  {
+    "pattern": "deepseek-chat",
+    "score": 1320
+  },
+  {
+    "pattern": "deepseek-coder",
+    "score": 1280
+  },
+  {
+    "pattern": "qwen3-235b",
+    "score": 1330
+  },
+  {
+    "pattern": "qwen3-32b",
+    "score": 1260
+  },
+  {
+    "pattern": "qwen3-8b",
+    "score": 1180
+  },
+  {
+    "pattern": "qwen3",
+    "score": 1220
+  },
+  {
+    "pattern": "qwen-?2\\.5-72b",
+    "score": 1300
+  },
+  {
+    "pattern": "qwen-?2\\.5-32b",
+    "score": 1250
+  },
+  {
+    "pattern": "qwen-?2\\.5-7b",
+    "score": 1170
+  },
+  {
+    "pattern": "qwen-max",
+    "score": 1320
+  },
+  {
+    "pattern": "qwen-plus",
+    "score": 1260
+  },
+  {
+    "pattern": "qwen-turbo",
+    "score": 1200
+  },
+  {
+    "pattern": "qwen",
+    "score": 1150
+  },
+  {
+    "pattern": "magistral",
+    "score": 1300
+  },
+  {
+    "pattern": "mistral-large",
+    "score": 1300
+  },
+  {
+    "pattern": "mistral-medium",
+    "score": 1270
+  },
+  {
+    "pattern": "mistral-small",
+    "score": 1200
+  },
+  {
+    "pattern": "codestral",
+    "score": 1200
+  },
+  {
+    "pattern": "ministral",
+    "score": 1150
+  },
+  {
+    "pattern": "mistral",
+    "score": 1190
+  },
+  {
+    "pattern": "grok-4",
+    "score": 1410
+  },
+  {
+    "pattern": "grok-3-mini",
+    "score": 1290
+  },
+  {
+    "pattern": "grok-3",
+    "score": 1350
+  },
+  {
+    "pattern": "grok-2-vision",
+    "score": 1240
+  },
+  {
+    "pattern": "grok-2",
+    "score": 1250
+  },
+  {
+    "pattern": "grok-code",
+    "score": 1290
+  },
+  {
+    "pattern": "grok",
+    "score": 1230
+  },
+  {
+    "pattern": "kimi-k2",
+    "score": 1380
+  },
+  {
+    "pattern": "kimi-latest",
+    "score": 1340
+  },
+  {
+    "pattern": "kimi",
+    "score": 1250
+  },
+  {
+    "pattern": "glm-4\\.6",
+    "score": 1380
+  },
+  {
+    "pattern": "glm-4\\.5-air",
+    "score": 1330
+  },
+  {
+    "pattern": "glm-4\\.5",
+    "score": 1340
+  },
+  {
+    "pattern": "glm-4",
+    "score": 1280
+  },
+  {
+    "pattern": "chatglm",
+    "score": 1120
+  },
+  {
+    "pattern": "ernie-4\\.5",
+    "score": 1300
+  },
+  {
+    "pattern": "ernie",
+    "score": 1200
+  },
+  {
+    "pattern": "minimax-m2",
+    "score": 1340
+  },
+  {
+    "pattern": "minimax-m1",
+    "score": 1290
+  },
+  {
+    "pattern": "step-?2",
+    "score": 1290
+  },
+  {
+    "pattern": "command-r-plus",
+    "score": 1230
+  },
+  {
+    "pattern": "command-a",
+    "score": 1200
+  },
+  {
+    "pattern": "jamba",
+    "score": 1210
+  },
+  {
+    "pattern": "nemotron",
+    "score": 1200
+  },
+  {
+    "pattern": "phi-4",
+    "score": 1200
+  },
+  {
+    "pattern": "phi-3",
+    "score": 1120
+  },
+  {
+    "pattern": "solar",
+    "score": 1200
+  },
+  {
+    "pattern": "doubao",
+    "score": 1250
+  },
+  {
+    "pattern": "hunyuan",
+    "score": 1250
+  },
+  {
+    "pattern": "ling",
+    "score": 1200
+  },
+  {
+    "pattern": "internlm",
+    "score": 1150
+  },
+  {
+    "pattern": "yi-(large|medium)?",
+    "score": 1180
+  },
+  {
+    "pattern": "solar-pro",
+    "score": 1240
+  },
+  {
+    "pattern": "nova-(pro|lite|micro)",
+    "score": 1180
+  },
+  {
+    "pattern": "titan",
+    "score": 1150
+  },
+  {
+    "pattern": "jamba",
+    "score": 1210
+  },
+  {
+    "pattern": "aya",
+    "score": 1150
+  },
+  {
+    "pattern": "openchat",
+    "score": 1120
+  },
+  {
+    "pattern": "nous",
+    "score": 1150
+  },
+  {
+    "pattern": "dbrx",
+    "score": 1200
+  },
+  {
+    "pattern": "starcoder",
+    "score": 1080
+  }
+]

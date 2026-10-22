@@ -9,6 +9,7 @@
     "declaration": true,
     "declarationMap": false,
     "sourceMap": false,
+    "resolveJsonModule": true,
     "strict": true,
     "noUncheckedIndexedAccess": false,
     "esModuleInterop": true,

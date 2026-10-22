@@ -3,7 +3,9 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 
 import type { CliArgs } from './args.js';
+import { getBenchmark, parseRankFile } from './benchmarks.js';
 import { discoverModels, filterModels, runTests } from './probe.js';
+import { sortResults } from './sort.js';
 import { c, Progress, renderSummary, renderTable } from './ui.js';
 import type { ModelInfo, ModelResult, Provider, ProviderReport, Summary } from './types.js';
 
@@ -55,9 +57,22 @@ export function buildSummary(results: ModelResult[]): Summary {
   };
 }
 
-function csvEscape(value: string): string {
-  const v = value ?? '';
-  return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+/** بارگذاری لیست سفارشی رتبه‌بندی (--rank-file) */
+export function loadRankFile(path?: string): Map<string, number> | undefined {
+  if (!path) return undefined;
+  const file = resolve(path);
+  if (!existsSync(file)) {
+    throw new Error(`Rank file not found: ${file}`);
+  }
+  return parseRankFile(readFileSync(file, 'utf8'));
+}
+
+/** اتصال امتیاز بنچمارک به مدل‌ها */
+export function attachBench(
+  models: ModelInfo[],
+  custom?: Map<string, number>,
+): ModelInfo[] {
+  return models.map((m) => ({ ...m, bench: getBenchmark(m.id, custom) }));
 }
 
 export function writeReports(
@@ -77,6 +92,7 @@ export function writeReports(
     baseUrl: provider.baseUrl,
     style: provider.style,
     generatedAt: new Date().toISOString(),
+    sort: args.sort,
     summary: buildSummary(results),
     results,
   };
@@ -87,7 +103,12 @@ export function writeReports(
     JSON.stringify(
       {
         ...report,
-        models: models.map((m) => ({ id: m.id, free: m.free, pricing: m.pricing })),
+        models: models.map((m) => ({
+          id: m.id,
+          free: m.free,
+          pricing: m.pricing,
+          bench: m.bench,
+        })),
       },
       null,
       2,
@@ -95,38 +116,6 @@ export function writeReports(
     'utf8',
   );
   written.push(jsonPath);
-
-  const csvPath = join(dir, `${safe}-${stamp}.csv`);
-  const rows = [
-    [
-      'provider',
-      'model',
-      'status',
-      'verdict',
-      'free',
-      'http_status',
-      'latency_ms',
-      'price_prompt_per_1m',
-      'price_completion_per_1m',
-      'detail',
-      'response',
-    ],
-    ...results.map((r) => [
-      r.provider,
-      r.model,
-      r.status,
-      r.status === 'ok' ? 'USABLE' : r.status === 'ratelimit' ? 'USABLE*' : '',
-      r.free === null ? '' : String(r.free),
-      String(r.httpStatus),
-      String(Math.round(r.latencyMs)),
-      r.pricing?.promptPerMillion === undefined ? '' : String(r.pricing.promptPerMillion),
-      r.pricing?.completionPerMillion === undefined ? '' : String(r.pricing.completionPerMillion),
-      r.detail,
-      r.response,
-    ]),
-  ];
-  writeFileSync(csvPath, '\ufeff' + rows.map((r) => r.map(csvEscape).join(',')).join('\n'), 'utf8');
-  written.push(csvPath);
 
   return written;
 }
@@ -137,8 +126,9 @@ export async function runProvider(
   args: CliArgs,
   keys: Record<string, string>,
   askForKey?: (provider: Provider) => Promise<string>,
+  rankMap?: Map<string, number>,
 ): Promise<ModelResult[]> {
-  console.log(c.bold(`\n━━━ ${provider.name}  ${c.dim(provider.baseUrl)} ━━━`));
+  console.log(c.bold(`\n--- ${provider.name}  ${c.dim(provider.baseUrl)} ---`));
 
   let apiKey = resolveApiKey(provider, args, keys);
   if (!apiKey && askForKey) {
@@ -146,7 +136,7 @@ export async function runProvider(
   }
   if (!apiKey) {
     console.log(
-      c.yellow('  ⚠ کلیدی پیدا نشد — بدون احراز هویت تست می‌شود (مناسب سرورهای محلی)'),
+      c.yellow('  ! No API key found - testing without authentication (fine for local servers)'),
     );
   }
 
@@ -154,7 +144,7 @@ export async function runProvider(
 
   if (args.models.length) {
     models = args.models.map((m) => ({ id: m, requestId: m, free: null }));
-    console.log(`  ${c.dim(`مدل‌های دستی: ${models.length}`)}`);
+    console.log(`  ${c.dim(`Manual model list: ${models.length}`)}`);
   } else {
     const discovery = await discoverModels(provider, apiKey, {
       timeout: args.timeout,
@@ -162,18 +152,23 @@ export async function runProvider(
     });
     if (discovery.endpoint) {
       console.log(
-        `  ${c.dim(`لیست مدل‌ها: ${discovery.models.length} عدد`)}  ${c.dim(discovery.endpoint)}`,
+        `  ${c.dim(`Discovered ${discovery.models.length} models`)}  ${c.dim(discovery.endpoint)}`,
       );
     } else {
-      console.log(c.yellow(`  ⚠ لیست مدل‌ها گرفته نشد: ${discovery.error ?? '?'}`));
+      console.log(c.yellow(`  ! Could not fetch model list: ${discovery.error ?? '?'}`));
     }
     models = discovery.models;
   }
 
+  models = attachBench(models, rankMap);
+
   if (args.listOnly) {
     for (const m of models) {
       const tag = m.free === true ? c.green(' [FREE]') : m.free === false ? c.dim(' [paid]') : '';
-      console.log(`    ${m.id}${tag}`);
+      const score = m.bench?.score === null || m.bench?.score === undefined
+        ? c.dim('?')
+        : String(Math.round(m.bench.score));
+      console.log(`    ${score.padStart(5)}  ${m.id}${tag}`);
     }
     return [];
   }
@@ -189,13 +184,13 @@ export async function runProvider(
   });
 
   if (!filtered.length) {
-    console.log(c.yellow('  مدلی برای تست نماند.'));
+    console.log(c.yellow('  Nothing left to test.'));
     return [];
   }
 
   if (!args.quiet) {
     console.log(
-      `  ${c.dim(`تست ${filtered.length} مدل با ${args.concurrency} درخواست موازی ...`)}\n`,
+      `  ${c.dim(`Testing ${filtered.length} models with ${args.concurrency} parallel workers ...`)}\n`,
     );
   }
 
@@ -211,14 +206,16 @@ export async function runProvider(
   });
   progress.stop();
 
+  const sorted = sortResults(results, args.sort);
+
   if (!args.quiet) {
-    renderTable(results, args.showResponse);
-    renderSummary(results);
+    renderTable(sorted, args.showResponse);
+    renderSummary(sorted);
   }
 
   if (!args.noReport) {
-    const files = writeReports(provider, results, filtered, args);
-    if (!args.quiet) console.log(c.dim(`\n  گزارش‌ها: ${files.join(' , ')}`));
+    const files = writeReports(provider, sorted, filtered, args);
+    if (!args.quiet) console.log(c.dim(`\n  Report: ${files.join(' , ')}`));
   }
 
   if (args.json) {
@@ -229,8 +226,9 @@ export async function runProvider(
           provider: provider.name,
           baseUrl: provider.baseUrl,
           generatedAt: new Date().toISOString(),
-          summary: buildSummary(results),
-          results,
+          sort: args.sort,
+          summary: buildSummary(sorted),
+          results: sorted,
         },
         null,
         2,
@@ -238,26 +236,6 @@ export async function runProvider(
       'utf8',
     );
   }
-  if (args.csv) {
-    const rows = [
-      ['provider', 'model', 'status', 'verdict', 'free', 'http_status', 'latency_ms', 'detail'],
-      ...results.map((r) => [
-        r.provider,
-        r.model,
-        r.status,
-        r.status === 'ok' ? 'USABLE' : r.status === 'ratelimit' ? 'USABLE*' : '',
-        r.free === null ? '' : String(r.free),
-        String(r.httpStatus),
-        String(Math.round(r.latencyMs)),
-        r.detail,
-      ]),
-    ];
-    writeFileSync(
-      args.csv,
-      '\ufeff' + rows.map((r) => r.map(csvEscape).join(',')).join('\n'),
-      'utf8',
-    );
-  }
 
-  return results;
+  return sorted;
 }

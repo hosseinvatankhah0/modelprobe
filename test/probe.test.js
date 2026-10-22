@@ -5,8 +5,11 @@ import {
   detectFree,
   discoverModels,
   filterModels,
+  getBenchmark,
+  normalizeModelId,
   parsePricing,
   probeProvider,
+  sortResults,
   testModel,
 } from '../dist/index.js';
 import { startMockServer } from './mock-server.js';
@@ -145,5 +148,96 @@ describe('پروب کامل', () => {
       (r) => r.free === true && (r.status === 'ok' || r.status === 'ratelimit'),
     );
     assert.ok(usableFree.length >= 1);
+  });
+});
+
+describe('بنچمارک', () => {
+  it('مدل‌های شناخته‌شده را از دیتاست پیدا می‌کند', () => {
+    const gpt4o = getBenchmark('gpt-4o');
+    assert.equal(gpt4o.source, 'dataset');
+    assert.equal(gpt4o.score, 1360);
+  });
+
+  it('پیشوند ارائه‌دهنده را نادیده می‌گیرد', () => {
+    assert.equal(getBenchmark('openai/gpt-4o').score, 1360);
+    assert.equal(getBenchmark('meta-llama/Llama-3.1-70B-Instruct').score, 1230);
+  });
+
+  it('مدل ناشناخته را تخمین می‌زند', () => {
+    const unknown = getBenchmark('my-custom-model-7b');
+    assert.equal(unknown.source, 'estimate');
+    assert.ok(unknown.score > 0);
+  });
+
+  it('مدل‌های بزرگ‌تر امتیاز بالاتری می‌گیرند', () => {
+    const small = getBenchmark('vendor-model-7b').score;
+    const large = getBenchmark('vendor-model-70b').score;
+    assert.ok(large > small);
+  });
+
+  it('لیست سفارشی، امتیاز دیتاست را بازنویسی می‌کند', () => {
+    const custom = new Map([['gpt-4o', 1500]]);
+    const result = getBenchmark('gpt-4o', custom);
+    assert.equal(result.score, 1500);
+    assert.equal(result.source, 'custom');
+  });
+
+  it('نام مدل را نرمال می‌کند', () => {
+    assert.equal(normalizeModelId('models/gemini-2.5-pro'), 'gemini-2.5-pro');
+    assert.equal(normalizeModelId('vendor/model:free'), 'model');
+  });
+});
+
+describe('مرتب‌سازی', () => {
+  const make = (model, score, latency, free = false) => ({
+    provider: 'mock',
+    model,
+    status: 'ok',
+    httpStatus: 200,
+    latencyMs: latency,
+    detail: 'ok',
+    response: 'OK',
+    free,
+    bench: { score, source: 'dataset' },
+  });
+
+  it('بر اساس بنچمارک مرتب می‌کند', () => {
+    const sorted = sortResults(
+      [make('weak', 1100, 50), make('strong', 1400, 900), make('mid', 1250, 100)],
+      'bench',
+    );
+    assert.deepEqual(
+      sorted.map((r) => r.model),
+      ['strong', 'mid', 'weak'],
+    );
+  });
+
+  it('در امتیاز برابر، سریع‌تر جلو می‌آید', () => {
+    const sorted = sortResults([make('slow', 1300, 900), make('fast', 1300, 100)], 'bench');
+    assert.equal(sorted[0].model, 'fast');
+  });
+
+  it('مدل‌های بدون امتیاز را آخر می‌گذارد', () => {
+    const noScore = { ...make('unknown', 0, 10) };
+    noScore.bench = { score: null, source: 'none' };
+    const sorted = sortResults([noScore, make('known', 1200, 500)], 'bench');
+    assert.equal(sorted[0].model, 'known');
+    assert.equal(sorted[1].model, 'unknown');
+  });
+
+  it('حالت speed بر اساس زمان پاسخ مرتب می‌کند', () => {
+    const sorted = sortResults(
+      [make('slow', 1400, 900), make('fast', 1100, 50)],
+      'speed',
+    );
+    assert.equal(sorted[0].model, 'fast');
+  });
+
+  it('حالت free مدل‌های رایگان را اول می‌آورد', () => {
+    const sorted = sortResults(
+      [make('paid', 1400, 100, false), make('free', 1100, 900, true)],
+      'free',
+    );
+    assert.equal(sorted[0].model, 'free');
   });
 });

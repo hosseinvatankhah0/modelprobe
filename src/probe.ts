@@ -326,6 +326,7 @@ export async function testModel(
               detail: redact(msg.slice(0, 240), apiKey),
               response: '',
               free: model.free,
+              bench: model.bench,
               freeReason: model.freeReason,
               pricing: model.pricing,
               endpoint: redact(url, apiKey),
@@ -341,6 +342,7 @@ export async function testModel(
           detail: 'ok',
           response: text.slice(0, 300),
           free: model.free,
+          bench: model.bench,
           freeReason: model.freeReason,
           pricing: model.pricing,
           endpoint: redact(url, apiKey),
@@ -365,6 +367,7 @@ export async function testModel(
     detail: redact(extractError(last), apiKey),
     response: '',
     free: model.free,
+    bench: model.bench,
     freeReason: model.freeReason,
     pricing: model.pricing,
     endpoint: redact(last.url, apiKey),
@@ -426,6 +429,7 @@ export async function runTests(
           detail: err instanceof Error ? err.message : String(err),
           response: '',
           free: model.free,
+          bench: model.bench,
           freeReason: model.freeReason,
           pricing: model.pricing,
         };
@@ -438,3 +442,4 @@ export async function runTests(
   await Promise.all(Array.from({ length: Math.min(concurrency, models.length) }, worker));
   return results;
 }
+

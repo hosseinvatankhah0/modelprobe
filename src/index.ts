@@ -26,6 +26,15 @@ export {
 } from './probe.js';
 export { detectFree, formatPricing, parsePricing } from './free.js';
 export { extractError, httpJson, redact } from './http.js';
+export {
+  BENCHMARKS,
+  estimateBenchmark,
+  getBenchmark,
+  lookupDataset,
+  normalizeModelId,
+  parseRankFile,
+} from './benchmarks.js';
+export { isSortMode, sortResults, SORT_MODES } from './sort.js';
 export { buildSummary, resolveApiKey, runProvider } from './runner.js';
 export type {
   ApiStyle,

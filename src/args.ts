@@ -1,6 +1,7 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
+import { isSortMode, type SortMode } from './sort.js';
 import type { ApiStyle } from './types.js';
 
 export interface CliArgs {
@@ -24,7 +25,8 @@ export interface CliArgs {
   retries: number;
   showResponse: boolean;
   json?: string;
-  csv?: string;
+  sort: SortMode;
+  rankFile?: string;
   reportDir: string;
   noReport: boolean;
   interactive: boolean;
@@ -47,6 +49,7 @@ export const DEFAULT_ARGS: CliArgs = {
   concurrency: 8,
   retries: 2,
   showResponse: false,
+  sort: 'bench',
   reportDir: join(homedir(), '.modelprobe', 'reports'),
   noReport: false,
   interactive: false,
@@ -159,8 +162,17 @@ export function parseArgs(argv: string[]): CliArgs {
         args.json = takeValue(i, inline, flag);
         if (inline === undefined) i++;
         break;
-      case '--csv':
-        args.csv = takeValue(i, inline, flag);
+      case '--sort': {
+        const value = takeValue(i, inline, flag);
+        if (inline === undefined) i++;
+        if (!isSortMode(value)) {
+          throw new Error(`--sort must be one of: bench, speed, name, free (got "${value}")`);
+        }
+        args.sort = value;
+        break;
+      }
+      case '--rank-file':
+        args.rankFile = takeValue(i, inline, flag);
         if (inline === undefined) i++;
         break;
       case '--report-dir':

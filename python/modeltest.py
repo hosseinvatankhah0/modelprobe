@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-modeltest.py  —  تست مدل‌های یک پرووایدر با base_url + api_key
+modeltest.py  —  probe the models of any provider with base_url + api_key
 
-کارهایی که انجام می‌دهد:
-  1) کشف خودکار لیست مدل‌ها (GET /models) با چند الگوی آدرس
-  2) تست واقعی هر مدل با یک درخواست chat کوچک
-  3) دسته‌بندی دقیق خطا: auth / quota / rate-limit / not-found / bad-request / server / network
-  4) اجرای موازی، گزارش JSON و CSV، و جدول رنگی در ترمینال
+What it does:
+  1) auto-discover the model list (GET /models) using several URL patterns
+  2) send a real (tiny) chat request to every model
+  3) classify errors precisely: auth / quota / rate-limit / not-found / bad-request / server / network
+  4) run tests in parallel, write a JSON report, print a colored table
 
-فقط از کتابخانه استاندارد پایتون استفاده می‌کند (بدون pip install).
+Uses only the Python standard library (no pip install required).
 
-نمونه:
+Examples:
     python modeltest.py --base-url https://api.deepseek.com --api-key sk-xxx
     python modeltest.py --provider openai,openrouter --limit 40
     python modeltest.py --provider all
@@ -50,7 +50,7 @@ DEFAULT_TIMEOUT = 30
 DEFAULT_WORKERS = 6
 DEFAULT_RETRIES = 2
 
-# مدل‌هایی که برای chat/completion نیستند (embedding، تصویر، صوت و ...)
+# models that are not chat/completion models (embedding, image, audio, ...)
 NON_CHAT_RE = re.compile(
     r"(?i)(embed|tts|whisper|moderation|rerank|re-rank|dall-?e|gpt-image|imagen|"
     r"stable-diffusion|flux|sdxl|^clip$|clip-|guard-|realtime|audio-|voice-|music-|"
@@ -58,7 +58,7 @@ NON_CHAT_RE = re.compile(
     r"speech-to-text|text-to-speech)"
 )
 
-# ---------------------------------------------------------------- رنگ‌ها
+# ---------------------------------------------------------------- colors
 
 class C:
     enabled = True
@@ -80,10 +80,12 @@ class C:
     @classmethod
     def blue(cls, s): return cls.wrap("36", s)
     @classmethod
+    def cyan(cls, s): return cls.wrap("36", s)
+    @classmethod
     def magenta(cls, s): return cls.wrap("35", s)
 
 
-# ---------------------------------------------------------------- وضعیت‌ها
+# ---------------------------------------------------------------- statuses
 
 STATUS_META = {
     "ok":          ("OK",          "32"),
@@ -98,7 +100,7 @@ STATUS_META = {
     "error":       ("ERROR",       "31"),
 }
 
-# نتیجه‌گیری نهایی برای هر مدل
+# final verdict per model
 VERDICT = {
     "ok":          ("USABLE",     "green"),
     "ratelimit":   ("USABLE*",    "yellow"),
@@ -113,7 +115,7 @@ VERDICT = {
 }
 
 
-# ---------------------------------------------------------------- دیتاکلاس‌ها
+# ---------------------------------------------------------------- dataclasses
 
 @dataclass
 class Provider:
@@ -149,10 +151,12 @@ class ModelResult:
     detail: str
     response: str = ""
     verdict: str = ""
+    free: bool | None = None
+    bench: tuple[float | None, str] | None = None
     endpoint: str = ""
 
 
-# ---------------------------------------------------------------- ابزارها
+# ---------------------------------------------------------------- utilities
 
 def now_iso() -> str:
     return datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
@@ -182,7 +186,7 @@ def redact(text: str, key: str) -> str:
 
 
 def load_dotenv() -> None:
-    """خواندن ساده‌ی فایل .env بدون وابستگی خارجی"""
+    """Read a simple .env file without external dependencies"""
     env_file = HERE / ".env"
     if not env_file.exists():
         return
@@ -206,7 +210,7 @@ def make_opener(direct: bool):
 
 def http_json(url, method="GET", headers=None, body=None, timeout=DEFAULT_TIMEOUT,
               retries=DEFAULT_RETRIES, direct=False):
-    """یک درخواست JSON با retry روی 429/5xx"""
+    """A JSON request with retry on 429/5xx"""
     payload = None
     hdrs = {
         "User-Agent": f"modeltest/{APP_VERSION}",
@@ -245,7 +249,7 @@ def http_json(url, method="GET", headers=None, body=None, timeout=DEFAULT_TIMEOU
                 time.sleep(1.0 * (attempt + 1))
                 continue
             return HttpResult(0, False, "", lat, url, error=last)
-        except Exception as e:  # timeout و ...
+        except Exception as e:  # timeout, etc.
             lat = (time.perf_counter() - t0) * 1000.0
             msg = f"{type(e).__name__}: {e}"
             if "timed out" in msg.lower() or "timeout" in msg.lower():
@@ -257,7 +261,7 @@ def http_json(url, method="GET", headers=None, body=None, timeout=DEFAULT_TIMEOU
     return HttpResult(0, False, "", 0.0, url, error=last or "unknown error")
 
 
-# ---------------------------------------------------------------- پرووایدرها
+# ---------------------------------------------------------------- providers
 
 BUILTIN_PROVIDERS = {
     # ---------- OpenAI-compatible ----------
@@ -295,7 +299,7 @@ BUILTIN_PROVIDERS = {
     # ---------- Gemini-style ----------
     "gemini":        {"base_url": "https://generativelanguage.googleapis.com", "style": "gemini", "api_key_env": "GEMINI_API_KEY"},
 
-    # ---------- محلی ----------
+    # ---------- local ----------
     "ollama":        {"base_url": "http://localhost:11434/v1",  "api_key_env": "OLLAMA_API_KEY"},
     "lmstudio":      {"base_url": "http://localhost:1234/v1",   "api_key_env": "LMSTUDIO_API_KEY"},
     "llamacpp":      {"base_url": "http://localhost:8080/v1",   "api_key_env": "LLAMACPP_API_KEY"},
@@ -307,7 +311,7 @@ BUILTIN_PROVIDERS = {
 
 
 def build_providers(local_file: Path = PROVIDERS_FILE):
-    """ترکیب پرووایدرهای داخلی با فایل محلی کاربر"""
+    """Merge builtin providers with the user local config file"""
     providers: dict[str, Provider] = {}
     for name, cfg in BUILTIN_PROVIDERS.items():
         providers[name] = Provider(
@@ -358,14 +362,14 @@ def resolve_key(provider: Provider, keys: dict, cli_key: str = "") -> str:
         return str(keys[provider.name]).strip()
     if provider.api_key_env and os.environ.get(provider.api_key_env):
         return os.environ[provider.api_key_env].strip()
-    # fallback: نام env با حروف بزرگِ نام پرووایدر
+    # fallback: generic env var named after the provider
     generic = os.environ.get(f"{provider.name.upper()}_API_KEY")
     if generic:
         return generic.strip()
     return ""
 
 
-# ---------------------------------------------------------------- آدرس‌ها
+# ---------------------------------------------------------------- endpoints
 
 def _join(base: str, suffix: str) -> str:
     return base.rstrip("/") + suffix
@@ -400,7 +404,7 @@ def chat_url_candidates(p: Provider) -> list[str]:
             return [_join(b, "/messages")]
         return [_join(b, "/v1/messages"), _join(b, "/messages")]
     if p.style == "gemini":
-        return []  # ساخته می‌شود
+        return []  # built per model
     cands = [_join(b, "/chat/completions")]
     if not re.search(r"/v\d+$", b):
         cands.append(_join(b, "/v1/chat/completions"))
@@ -409,7 +413,7 @@ def chat_url_candidates(p: Provider) -> list[str]:
     return cands
 
 
-# ---------------------------------------------------------------- هدرها
+# ---------------------------------------------------------------- headers
 
 def auth_headers(p: Provider, key: str) -> dict:
     h = dict(p.extra_headers)
@@ -419,16 +423,26 @@ def auth_headers(p: Provider, key: str) -> dict:
         h.setdefault("x-api-key", key)
         h.setdefault("anthropic-version", "2023-06-01")
     elif p.style == "gemini":
-        pass  # کلید داخل query string
+        pass  # key goes in the query string
     else:
         h.setdefault("Authorization", f"Bearer {key}")
     return h
 
 
-# ---------------------------------------------------------------- کشف مدل
+# ---------------------------------------------------------------- model discovery
+
+FREE_NAME_RE = re.compile(r"(?i)(:free$|(^|[-_/.])free([-_/.]|$))")
+
+
+def detect_free(model_id: str) -> bool | None:
+    """True / False / None (unknown) - name based detection."""
+    if FREE_NAME_RE.search(model_id):
+        return True
+    return None
+
 
 def parse_models(p: Provider, payload: dict) -> list[tuple[str, str]]:
-    """خروجی: لیستی از (model_id, request_model)"""
+    """Returns a list of (model_id, request_model) tuples"""
     out: list[tuple[str, str]] = []
     if p.style == "gemini":
         items = payload.get("models") or payload.get("data") or []
@@ -458,7 +472,7 @@ def parse_models(p: Provider, payload: dict) -> list[tuple[str, str]]:
 
 
 def discover_models(p: Provider, key: str, timeout: int, direct: bool):
-    """لیست مدل‌ها را کشف می‌کند. خروجی: (list_of_models, endpoint, error)"""
+    """Discover the model list. Returns (models, endpoint, error)"""
     headers = auth_headers(p, key)
     last_err = ""
     for url in list_url_candidates(p):
@@ -470,12 +484,12 @@ def discover_models(p: Provider, key: str, timeout: int, direct: bool):
             try:
                 payload = json.loads(res.body)
             except Exception:
-                last_err = "پاسخ JSON نبود"
+                last_err = "response was not JSON"
                 continue
             models = parse_models(p, payload)
             if models:
                 return models, url, ""
-            # بعضی گیت‌وی‌ها لیست را خالی برمی‌گردانند ولی ساختار درست است
+            # some gateways return an empty list but a valid structure
             if isinstance(payload, dict) and ("data" in payload or "models" in payload):
                 return [], url, ""
         else:
@@ -506,7 +520,7 @@ def extract_error(res: HttpResult) -> str:
     return body[:220].replace("\n", " ")
 
 
-# ---------------------------------------------------------------- تست مدل
+# ---------------------------------------------------------------- model testing
 
 def classify(status: int, body: str, err: str) -> str:
     if status == 200:
@@ -532,7 +546,7 @@ def classify(status: int, body: str, err: str) -> str:
 
 
 def body_variants(p: Provider, model: str, prompt: str, max_tokens: int, stream: bool):
-    """بدنه‌های جایگزین برای مدل‌هایی که پارامترهای خاص را قبول نمی‌کنند"""
+    """Fallback request bodies for models that reject specific parameters"""
     if p.style == "anthropic":
         return [{
             "model": model, "max_tokens": max_tokens, "temperature": 0,
@@ -632,15 +646,15 @@ def test_model(p: Provider, model_id: str, request_model: str, key: str, args) -
                                            res.status, res.latency_ms, detail, "", "", url)
                 return ModelResult(p.name, model_id, request_model, "ok", res.status,
                                    res.latency_ms, "ok", text[:300], "", url)
-            # خطای پارامتر -> بدنه‌ی بعدی را امتحان کن
+            # parameter error -> try the next body variant
             if res.status == 400 and vi < len(variants) - 1 and looks_like_param_error(res.body):
                 continue
             if res.status == 400 and vi < len(variants) - 1 and vi == 0:
                 continue
-            break  # به آدرس بعدی / بدنه‌ی بعدی نرو مگر خطای پارامتر باشد
+            break  # do not try another url/body unless it was a param error
         else:
             continue
-        # اگر به اینجا رسیدیم یعنی روی این آدرس جواب نگرفتیم
+        # reaching here means this endpoint did not work
         if last.status not in (404, 405):
             break
 
@@ -650,7 +664,90 @@ def test_model(p: Provider, model_id: str, request_model: str, key: str, args) -
                        last.latency_ms, detail, "", "", last.url)
 
 
-# ---------------------------------------------------------------- خروجی
+# ---------------------------------------------------------------- benchmarks
+
+BENCH_FILE = HERE.parent / "src" / "benchmarks.json"
+
+SIZE_TIERS = [
+    (re.compile(r"\b(400|405)b\b"), 30),
+    (re.compile(r"\b(70|72|80)b\b"), 22),
+    (re.compile(r"\b(32|34|36)b\b"), 14),
+    (re.compile(r"\b(20|14|16)b\b"), 8),
+    (re.compile(r"\b(7|8|9)b\b"), 3),
+    (re.compile(r"\b(1|2|3|4)b\b"), -4),
+]
+
+QUALITY_TIERS = [
+    (re.compile(r"\b(opus|ultra|flagship)\b"), 16),
+    (re.compile(r"\b(pro|max|xl)\b"), 12),
+    (re.compile(r"\b(plus|advanced|premium)\b"), 8),
+    (re.compile(r"\b(thinking|reasoner|reasoning|r1)\b"), 8),
+    (re.compile(r"\b(instruct|chat)\b"), 2),
+    (re.compile(r"\b(preview|beta|experimental|exp|nightly)\b"), -6),
+    (re.compile(r"\b(mini|nano|tiny|small|lite|light)\b"), -8),
+    (re.compile(r"\b(large|xl)\b"), 6),
+]
+
+
+def load_benchmarks() -> list[dict]:
+    try:
+        return json.loads(BENCH_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+
+
+def normalize_model_id(model_id: str) -> str:
+    name = model_id.lower().replace("models/", "")
+    name = name.split("/")[-1]
+    name = re.sub(r":free$", "", name)
+    return name.strip()
+
+
+def lookup_benchmark(model_id: str) -> tuple[float | None, str]:
+    """(score, source) - source is dataset | estimate | none"""
+    mid = normalize_model_id(model_id)
+    for entry in load_benchmarks():
+        try:
+            if re.search(entry["pattern"], mid, re.I):
+                return float(entry["score"]), "dataset"
+        except re.error:
+            continue
+
+    score = 1180.0
+    for rx, delta in SIZE_TIERS:
+        if rx.search(mid):
+            score += delta
+    for rx, delta in QUALITY_TIERS:
+        if rx.search(mid):
+            score += delta
+    return max(900.0, min(1500.0, score)), "estimate"
+
+
+def bench_text(bench: tuple[float | None, str] | None) -> str:
+    if not bench or bench[0] is None:
+        return C.dim("?")
+    if bench[1] == "estimate":
+        return C.yellow(f"~{int(round(bench[0]))}")
+    return C.cyan(str(int(round(bench[0]))))
+
+
+def sort_results(results: list[ModelResult], mode: str = "bench") -> list[ModelResult]:
+    def score(r: ModelResult) -> float:
+        return r.bench[0] if r and r.bench and r.bench[0] is not None else float("-inf")
+
+    out = list(results)
+    if mode == "speed":
+        out.sort(key=lambda r: (r.latency_ms, -score(r)))
+    elif mode == "name":
+        out.sort(key=lambda r: r.model.lower())
+    elif mode == "free":
+        out.sort(key=lambda r: (0 if r.free is True else 1, -score(r), r.latency_ms))
+    else:
+        out.sort(key=lambda r: (-score(r), r.latency_ms))
+    return out
+
+
+# ---------------------------------------------------------------- output
 
 def status_text(status: str) -> str:
     label, color = STATUS_META.get(status, ("ERROR", "31"))
@@ -662,24 +759,32 @@ def verdict_text(status: str) -> str:
     return C.wrap(color, v)
 
 
+def pad_visible(text: str, width: int) -> str:
+    """Pad based on visible length (ANSI codes do not count)."""
+    visible = len(re.sub(r"\033\[[0-9;]*m", "", text))
+    return text + " " * max(0, width - visible)
+
+
 def print_table(results: list[ModelResult], show_response: bool = False) -> None:
     if not results:
         return
-    w_model = max(12, min(56, max(len(r.model) for r in results)))
+    w_model = max(12, min(46, max(len(r.model) for r in results)))
     rows = []
     for i, r in enumerate(results, 1):
         detail = (r.detail or "").replace("\n", " ")
-        if len(detail) > 46:
-            detail = detail[:45] + "…"
-        rows.append((str(i), r.model, status_text(r.status), verdict_text(r.status),
-                     f"{r.latency_ms:.0f}ms", detail, r))
-    hdr = (f"{'#':>3}  {'MODEL':<{w_model}}  {'STATUS':<11}  {'VERDICT':<12}  {'TIME':>7}  DETAIL")
+        if len(detail) > 38:
+            detail = detail[:37] + "…"
+        rows.append((str(i), r.model, bench_text(r.bench), status_text(r.status),
+                     verdict_text(r.status), f"{r.latency_ms:.0f}ms", detail, r))
+    hdr = (f"{'#':>3}  {'MODEL':<{w_model}}  {'BENCH':<6}  {'STATUS':<12}  "
+           f"{'VERDICT':<13}  {'TIME':>7}  DETAIL")
     print(C.bold(hdr))
-    print(C.dim("-" * len(hdr)))
-    for num, model, st, vd, tm, detail, r in rows:
-        print(f"{num:>3}  {model:<{w_model}}  {st:<20}  {vd:<21}  {tm:>7}  {C.dim(detail)}")
+    print(C.dim("-" * (len(hdr) + 4)))
+    for num, model, bench, st, vd, tm, detail, r in rows:
+        print(f"{num:>3}  {model:<{w_model}}  {pad_visible(bench, 6)}  "
+              f"{pad_visible(st, 12)}  {pad_visible(vd, 13)}  {tm:>7}  {C.dim(detail)}")
         if show_response and r.response:
-            print(f"     {C.green('↳ ' + r.response)}")
+            print(f"     {C.green('> ' + r.response)}")
 
 
 def summarize(results: list[ModelResult]) -> dict:
@@ -699,19 +804,20 @@ def summarize(results: list[ModelResult]) -> dict:
 def print_summary(results: list[ModelResult]) -> dict:
     s = summarize(results)
     print()
-    print(C.bold("— خلاصه —"))
+    print(C.bold("- Summary -"))
     for st, cnt in sorted(s["counts"].items(), key=lambda kv: -kv[1]):
-        print(f"  {status_text(st):<20} {cnt}")
+        print(f"  {pad_visible(status_text(st), 20)} {cnt}")
     print()
-    line = (f"  قابل استفاده: {C.green(str(s['usable']))}"
-            f"   |  محدودیت نرخ: {C.yellow(str(s['throttled_but_usable']))}"
-            f"   |  کل: {C.bold(str(s['total']))}")
+    line = (f"  Usable: {C.green(str(s['usable']))}"
+            f"   |  Throttled: {C.yellow(str(s['throttled_but_usable']))}"
+            f"   |  Total: {C.bold(str(s['total']))}")
     print(line)
-    usable_models = [r.model for r in results if r.status in ("ok", "ratelimit")]
+    usable_models = [r for r in results if r.status in ("ok", "ratelimit")]
     if usable_models:
-        print(C.bold("\n  مدل‌های قابل استفاده:"))
-        for m in usable_models:
-            print(f"    {C.green('✓')} {m}")
+        print(C.bold("\n  Usable models:"))
+        for r in usable_models:
+            bench = bench_text(r.bench)
+            print(f"    {C.green('+')} {r.model}  {C.dim(bench)}  {C.dim(f'{r.latency_ms:.0f}ms')}")
     return s
 
 
@@ -724,12 +830,15 @@ def write_reports(p: Provider, results: list[ModelResult], args, summary: dict) 
         "tool": f"modeltest/{APP_VERSION}",
         "generated_at": now_iso(),
         "provider": {"name": p.name, "base_url": p.base_url, "style": p.style},
+        "sort": getattr(args, "sort", "bench"),
         "summary": summary,
         "results": [
             {
                 "model": r.model,
                 "status": r.status,
                 "verdict": VERDICT.get(r.status, ["UNKNOWN"])[0],
+                "free": r.free,
+                "bench": {"score": r.bench[0], "source": r.bench[1]} if r.bench else None,
                 "http_status": r.http_status,
                 "latency_ms": round(r.latency_ms, 1),
                 "detail": r.detail,
@@ -742,19 +851,10 @@ def write_reports(p: Provider, results: list[ModelResult], args, summary: dict) 
     jf = REPORT_DIR / f"{safe}-{stamp}.json"
     save_json(jf, payload)
     written.append(str(jf))
-
-    cf_ = REPORT_DIR / f"{safe}-{stamp}.csv"
-    with open(cf_, "w", newline="", encoding="utf-8-sig") as f:
-        w = csv.writer(f)
-        w.writerow(["model", "status", "verdict", "http_status", "latency_ms", "detail", "response"])
-        for r in results:
-            w.writerow([r.model, r.status, VERDICT.get(r.status, ["UNKNOWN"])[0],
-                        r.http_status, f"{r.latency_ms:.0f}", r.detail, r.response])
-    written.append(str(cf_))
     return written
 
 
-# ---------------------------------------------------------------- فیلترها
+# ---------------------------------------------------------------- filters
 
 def filter_models(models: list[tuple[str, str]], args) -> list[tuple[str, str]]:
     out = models
@@ -762,7 +862,7 @@ def filter_models(models: list[tuple[str, str]], args) -> list[tuple[str, str]]:
         try:
             rx = re.compile(args.grep, re.I)
         except re.error as e:
-            print(C.red(f"  [grep نامعتبر: {e}]"))
+            print(C.red(f"  [invalid grep: {e}]"))
             rx = None
         if rx:
             out = [m for m in out if rx.search(m[0])]
@@ -770,7 +870,7 @@ def filter_models(models: list[tuple[str, str]], args) -> list[tuple[str, str]]:
         try:
             rx2 = re.compile(args.skip, re.I)
         except re.error as e:
-            print(C.red(f"  [skip نامعتبر: {e}]"))
+            print(C.red(f"  [invalid skip: {e}]"))
             rx2 = None
         if rx2:
             out = [m for m in out if not rx2.search(m[0])]
@@ -786,10 +886,10 @@ def filter_models(models: list[tuple[str, str]], args) -> list[tuple[str, str]]:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="modeltest.py",
-        description="تست مدل‌های API با base_url و api_key (OpenAI / Anthropic / Gemini / local)",
+        description="Probe API models with base_url and api_key (OpenAI / Anthropic / Gemini / local)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-نمونه‌ها:
+Examples:
   python modeltest.py --base-url https://api.deepseek.com --api-key sk-xxx
   python modeltest.py --provider openai,openrouter --limit 40
   python modeltest.py --provider all
@@ -798,42 +898,44 @@ def build_parser() -> argparse.ArgumentParser:
   python modeltest.py --providers
   python modeltest.py --set-key openai sk-xxxx
 """)
-    p.add_argument("--base-url", "-b", help="آدرس پایه API (مثلاً https://api.deepseek.com/v1)")
-    p.add_argument("--api-key", "-k", help="کلید API (اگر ندهی از env یا keys.local.json خوانده می‌شود)")
-    p.add_argument("--provider", "-p", help="نام پرووایدر (یا چند نام با کاما) — 'all' برای همه")
-    p.add_argument("--providers", action="store_true", help="لیست پرووایدرهای شناخته‌شده")
+    p.add_argument("--base-url", "-b", help="API base URL (e.g. https://api.deepseek.com/v1)")
+    p.add_argument("--api-key", "-k", help="API key (falls back to env vars or keys.local.json)")
+    p.add_argument("--provider", "-p", help="Provider name (comma separated, 'all' for every one)")
+    p.add_argument("--providers", action="store_true", help="List known providers")
     p.add_argument("--style", choices=["openai", "anthropic", "gemini"],
-                   help="نوع API (پیش‌فرض: openai؛ برای anthropic/gemini)")
+                   help="API style (default: openai; also anthropic/gemini)")
     p.add_argument("--model", action="append", default=[],
-                   help="تست فقط این مدل‌ها (قابل تکرار) — نیازی به لیست مدل نیست")
-    p.add_argument("--list-only", action="store_true", help="فقط لیست مدل‌ها، بدون تست")
-    p.add_argument("--probe", action="store_true", help="فقط بررسی در دسترس بودن آدرس‌ها")
-    p.add_argument("--grep", help="فقط مدل‌هایی که این regex را داشته باشند")
-    p.add_argument("--skip", help="حذف مدل‌هایی که این regex را داشته باشند")
-    p.add_argument("--limit", type=int, default=0, help="حداکثر تعداد مدل برای تست")
+                   help="Test only these models (repeatable) - no model list needed")
+    p.add_argument("--list-only", action="store_true", help="Only list models, do not test")
+    p.add_argument("--probe", action="store_true", help="Only check endpoint reachability")
+    p.add_argument("--grep", help="Only models matching this regex")
+    p.add_argument("--skip", help="Drop models matching this regex")
+    p.add_argument("--limit", type=int, default=0, help="Max number of models to test")
     p.add_argument("--include-non-chat", action="store_true",
-                   help="تست مدل‌های غیرچت (embedding/تصویر/...) هم")
-    p.add_argument("--prompt", default=DEFAULT_PROMPT, help="متن تست")
+                   help="Also test non-chat models (embedding/image/...)")
+    p.add_argument("--prompt", default=DEFAULT_PROMPT, help="Test prompt")
     p.add_argument("--max-tokens", type=int, default=DEFAULT_MAX_TOKENS)
     p.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT)
     p.add_argument("--retries", type=int, default=DEFAULT_RETRIES)
-    p.add_argument("--workers", "-w", type=int, default=DEFAULT_WORKERS, help="تعداد درخواست موازی")
-    p.add_argument("--stream", action="store_true", help="تست با stream=true")
-    p.add_argument("--direct", action="store_true", help="بدون استفاده از پروکسی سیستم")
+    p.add_argument("--workers", "-w", type=int, default=DEFAULT_WORKERS, help="Parallel requests")
+    p.add_argument("--stream", action="store_true", help="Test with stream=true")
+    p.add_argument("--direct", action="store_true", help="Bypass the system proxy")
     p.add_argument("--no-color", action="store_true")
-    p.add_argument("--quiet", "-q", action="store_true", help="فقط خلاصه")
-    p.add_argument("--show-response", action="store_true", help="نمایش پاسخ مدل")
-    p.add_argument("--json", dest="json_out", help="ذخیره خروجی JSON در این مسیر")
-    p.add_argument("--csv", dest="csv_out", help="ذخیره خروجی CSV در این مسیر")
-    p.add_argument("--no-report", action="store_true", help="ذخیره نکردن گزارش خودکار")
+    p.add_argument("--quiet", "-q", action="store_true", help="Summary only")
+    p.add_argument("--show-response", action="store_true", help="Print model responses")
+    p.add_argument("--json", dest="json_out", help="Write JSON output to this path")
+    p.add_argument("--sort", choices=["bench", "speed", "name", "free"], default="bench",
+                   help="Sort order: bench (default) | speed | name | free")
+    p.add_argument("--rank-file", help="Custom benchmark scores as JSON: {\"model-id\": 1350}")
+    p.add_argument("--no-report", action="store_true", help="Do not write reports")
     p.add_argument("--set-key", nargs=2, metavar=("PROVIDER", "KEY"),
-                   help="ذخیره کلید در keys.local.json")
-    p.add_argument("--config", default=str(PROVIDERS_FILE), help="مسیر فایل پرووایدرهای سفارشی")
+                   help="Store a key in keys.local.json")
+    p.add_argument("--config", default=str(PROVIDERS_FILE), help="Path to a custom providers file")
     return p
 
 
 def cmd_list_providers(providers: dict) -> None:
-    print(C.bold("\nپرووایدرهای شناخته‌شده:\n"))
+    print(C.bold("\nKnown providers:\n"))
     print(f"  {'NAME':<14} {'STYLE':<10} {'BASE URL':<46} ENV")
     print(C.dim("  " + "-" * 92))
     for name, p in sorted(providers.items()):
@@ -842,53 +944,55 @@ def cmd_list_providers(providers: dict) -> None:
         env = p.api_key_env or "-"
         has = "✔" if os.environ.get(p.api_key_env or "\0") else " "
         print(f"  {name:<14} {p.style:<10} {p.base_url:<46} {env} {has}")
-    print(C.dim("\n  ✔ = کلید در متغیر محیطی موجود است\n"))
+    print(C.dim("\n  yes = an API key for that provider is present in the environment\n"))
 
 
 def cmd_set_key(name: str, key: str) -> None:
     keys = load_json(KEYS_FILE, {}) or {}
     keys[name] = key
     save_json(KEYS_FILE, keys)
-    print(f"  کلید «{name}» در {KEYS_FILE} ذخیره شد.")
+    print(f"  Stored key for \"{name}\" ({KEYS_FILE})")
 
 
 def run_one_provider(p: Provider, key: str, args) -> list[ModelResult]:
-    print(C.bold(f"\n━━━ پرووایدر: {p.name}  ({p.base_url}) ━━━"))
+    print(C.bold(f"\n--- {p.name}  ({p.base_url}) ---"))
     if not key:
-        print(C.yellow("  ⚠ کلیدی پیدا نشد (api_key/env/keys.local.json) — تست بدون احراز هویت انجام می‌شود"))
+        print(C.yellow("  ! No API key found - testing without authentication (fine for local servers)"))
 
-    # 1) کشف مدل
+    # 1) discover models
     models: list[tuple[str, str]] = []
     list_endpoint = ""
     if args.model:
         models = [(m, m) for m in args.model]
-        print(f"  مدل‌های دستی: {len(models)}")
+        print(f"  Manual model list: {len(models)}")
     else:
         models, list_endpoint, err = discover_models(p, key, args.timeout, args.direct)
         if list_endpoint:
-            print(f"  لیست مدل‌ها: {len(models)} عدد  ({redact(list_endpoint, key)})")
+            print(f"  Discovered {len(models)} models  ({redact(list_endpoint, key)})")
         else:
-            print(C.yellow(f"  ⚠ لیست مدل‌ها گرفته نشد: {redact(err, key)}"))
+            print(C.yellow(f"  ! Could not fetch model list: {redact(err, key)}"))
             if p.default_models:
                 models = [(m, m) for m in p.default_models]
-                print(C.dim(f"  استفاده از لیست پیش‌فرض ({len(models)} مدل)"))
+                print(C.dim(f"  Using the default model list ({len(models)} models)"))
 
     if args.list_only:
         for mid, mref in models:
-            print(f"    {mid}")
+            score, source = lookup_benchmark(mid)
+            tag = ""
+            print(f"    {bench_text((score, source)):>8}  {mid}{tag}")
         if args.json_out:
             save_json(args.json_out, {"provider": p.name, "models": [m[0] for m in models]})
         return []
 
     models = filter_models(models, args)
     if not models:
-        print(C.yellow("  مدلی برای تست نماند."))
+        print(C.yellow("  Nothing left to test."))
         return []
 
     if not args.quiet:
-        print(f"  تست {len(models)} مدل با {args.workers} worker موازی ...\n")
+        print(f"  Testing {len(models)} models with {args.workers} parallel workers ...\n")
 
-    # 2) تست موازی
+    # 2) run the tests in parallel
     results: list[ModelResult] = []
     with cf.ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
         futs = {pool.submit(test_model, p, mid, mref, key, args): mid for mid, mref in models}
@@ -900,38 +1004,36 @@ def run_one_provider(p: Provider, key: str, args) -> list[ModelResult]:
                 results.append(ModelResult(p.name, mid, mid, "error", 0, 0.0,
                                            f"{type(e).__name__}: {e}"))
 
-    order = {m[0]: i for i, m in enumerate(models)}
-    results.sort(key=lambda r: order.get(r.model, 9999))
+    for r in results:
+        r.bench = lookup_benchmark(r.model)
+        if r.free is None:
+            r.free = detect_free(r.model)
+
+    results = sort_results(results, getattr(args, "sort", "bench"))
 
     if not args.quiet:
         print_table(results, show_response=args.show_response)
     summary = print_summary(results)
 
-    # 3) ذخیره گزارش
+    # 3) write the report
     if not args.no_report:
         files = write_reports(p, results, args, summary)
         if not args.quiet:
-            print(C.dim(f"\n  گزارش‌ها: {', '.join(files)}"))
+            print(C.dim(f"\n  Report: {', '.join(files)}"))
     if args.json_out:
         save_json(args.json_out, {
             "provider": p.name, "base_url": p.base_url,
+            "sort": getattr(args, "sort", "bench"),
             "summary": summary,
             "results": [{"model": r.model, "status": r.status,
                          "verdict": VERDICT.get(r.status, ["UNKNOWN"])[0],
+                         "free": r.free,
+                         "bench": {"score": r.bench[0], "source": r.bench[1]} if r.bench else None,
                          "http_status": r.http_status,
                          "latency_ms": round(r.latency_ms, 1),
                          "detail": r.detail, "response": r.response}
                         for r in results],
         })
-    if args.csv_out:
-        import csv as _csv
-        with open(args.csv_out, "w", newline="", encoding="utf-8-sig") as f:
-            w = _csv.writer(f)
-            w.writerow(["provider", "model", "status", "verdict", "http_status", "latency_ms", "detail"])
-            for r in results:
-                w.writerow([p.name, r.model, r.status,
-                            VERDICT.get(r.status, ["UNKNOWN"])[0],
-                            r.http_status, f"{r.latency_ms:.0f}", r.detail])
     return results
 
 
@@ -957,7 +1059,7 @@ def main(argv=None) -> int:
         build_parser().print_help()
         return 2
 
-    # انتخاب پرووایدرها
+    # pick the providers
     targets: list[Provider] = []
     if args.base_url:
         style = args.style or "openai"
@@ -970,7 +1072,7 @@ def main(argv=None) -> int:
             names = [n for n, pr in providers.items() if pr.base_url]
         for n in names:
             if n not in providers:
-                print(C.red(f"  پرووایدر ناشناخته: {n}  (با --providers لیست را ببینید)"))
+                print(C.red(f"  Unknown provider: {n}  (use --providers to list them)"))
                 continue
             targets.append(providers[n])
 
@@ -981,7 +1083,7 @@ def main(argv=None) -> int:
         all_results.extend(res)
 
     if len(targets) > 1 and all_results:
-        print(C.bold("\n\n═══ جمع‌بندی همه پرووایدرها ═══"))
+        print(C.bold("\n\n=== All providers ==="))
         print_table(all_results, show_response=False)
         print_summary(all_results)
 
@@ -997,5 +1099,5 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except KeyboardInterrupt:
-        print("\nلغو شد.")
+        print("\nCancelled.")
         sys.exit(130)

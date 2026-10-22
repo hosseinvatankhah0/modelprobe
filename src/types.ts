@@ -23,6 +23,15 @@ export interface Pricing {
   perRequest?: number;
 }
 
+export interface Bench {
+  /** امتیاز توانمندی مدل (سبک Elo)؛ null یعنی نامشخص */
+  score: number | null;
+  /** منبع امتیاز */
+  source: 'dataset' | 'estimate' | 'custom' | 'none';
+  /** برچسب اختیاری */
+  label?: string;
+}
+
 export interface ModelInfo {
   /** نام نمایشی مدل */
   id: string;
@@ -34,6 +43,8 @@ export interface ModelInfo {
   free: boolean | null;
   /** دلیل تشخیص رایگان بودن */
   freeReason?: string;
+  /** امتیاز توانمندی (بنچمارک) */
+  bench?: Bench;
   /** داده خام از API */
   raw?: unknown;
 }
@@ -68,6 +79,7 @@ export interface ModelResult {
   free: boolean | null;
   freeReason?: string;
   pricing?: Pricing;
+  bench?: Bench;
   endpoint?: string;
 }
 
@@ -91,6 +103,7 @@ export interface ProviderReport {
   baseUrl: string;
   style: ApiStyle;
   generatedAt: string;
+  sort?: string;
   summary: Summary;
   results: ModelResult[];
 }

@@ -1,6 +1,7 @@
 import { createInterface } from 'node:readline';
+
 import { formatPricing } from './free.js';
-import type { ModelResult, Status } from './types.js';
+import type { Bench, ModelResult, Status } from './types.js';
 
 let colorEnabled = process.stdout.isTTY === true && !process.env.NO_COLOR;
 
@@ -65,6 +66,21 @@ export function freeText(free: boolean | null): string {
   return wrap('2', '?');
 }
 
+/** نمایش امتیاز بنچمارک: تخمینی با ~ مشخص می‌شود */
+export function benchText(bench?: Bench): string {
+  if (!bench || bench.score === null) return c.dim('?');
+  if (bench.source === 'estimate') return c.yellow(`~${Math.round(bench.score)}`);
+  return c.cyan(String(Math.round(bench.score)));
+}
+
+const ANSI_RE = /\u001b\[[0-9;]*m/g;
+
+/** پدینگ بر اساس طول قابل مشاهده (کدهای ANSI حساب نمی‌شوند) */
+export function padVisible(text: string, width: number): string {
+  const visible = text.replace(ANSI_RE, '').length;
+  return text + ' '.repeat(Math.max(0, width - visible));
+}
+
 function truncate(text: string, max: number): string {
   if (text.length <= max) return text;
   return `${text.slice(0, Math.max(0, max - 1))}…`;
@@ -74,16 +90,22 @@ function truncate(text: string, max: number): string {
 export function renderTable(results: ModelResult[], showResponse = false): void {
   if (!results.length) return;
 
-  const modelWidth = Math.min(52, Math.max(14, ...results.map((r) => r.model.length)));
-  const detailWidth = 44;
+  const modelWidth = Math.min(46, Math.max(14, ...results.map((r) => r.model.length)));
+  const detailWidth = 38;
+  const benchWidth = 6;
+  const statusWidth = 12;
+  const verdictWidth = 13;
+  const freeWidth = 6;
+  const priceWidth = 22;
 
   const header = [
     '  #',
     'MODEL'.padEnd(modelWidth),
-    'STATUS'.padEnd(12),
-    'VERDICT'.padEnd(13),
-    'FREE'.padEnd(6),
-    'PRICE'.padEnd(26),
+    'BENCH'.padEnd(benchWidth),
+    'STATUS'.padEnd(statusWidth),
+    'VERDICT'.padEnd(verdictWidth),
+    'FREE'.padEnd(freeWidth),
+    'PRICE'.padEnd(priceWidth),
     'TIME'.padStart(8),
     'DETAIL',
   ].join('  ');
@@ -97,10 +119,11 @@ export function renderTable(results: ModelResult[], showResponse = false): void 
       [
         String(i + 1).padStart(3),
         truncate(r.model, modelWidth).padEnd(modelWidth),
-        statusText(r.status).padEnd(20),
-        verdictText(r.status).padEnd(22),
-        freeText(r.free).padEnd(14),
-        c.dim(truncate(formatPricing(r.pricing), 24).padEnd(24)),
+        padVisible(benchText(r.bench), benchWidth),
+        padVisible(statusText(r.status), statusWidth),
+        padVisible(verdictText(r.status), verdictWidth),
+        padVisible(freeText(r.free), freeWidth),
+        padVisible(c.dim(truncate(formatPricing(r.pricing), priceWidth)), priceWidth),
         `${Math.round(r.latencyMs)}ms`.padStart(8),
         c.dim(detail),
       ].join('  '),
@@ -120,29 +143,43 @@ export function renderSummary(results: ModelResult[]): void {
   const throttled = results.filter((r) => r.status === 'ratelimit');
   const freeModels = results.filter((r) => r.free === true);
   const freeUsable = freeModels.filter((r) => r.status === 'ok' || r.status === 'ratelimit');
+  const usableAll = results.filter((r) => r.status === 'ok' || r.status === 'ratelimit');
 
   console.log('');
-  console.log(c.bold('— خلاصه —'));
+  console.log(c.bold('- Summary -'));
   for (const [status, count] of [...counts.entries()].sort((a, b) => b[1] - a[1])) {
-    console.log(`  ${statusText(status).padEnd(22)} ${count}`);
+    console.log(`  ${padVisible(statusText(status), 20)} ${count}`);
   }
   console.log('');
   console.log(
-    `  ${c.green(`قابل استفاده: ${usable.length + throttled.length}`)}` +
-      `   |  ${c.yellow(`رایگان: ${freeModels.length}`)}` +
-      `   |  ${c.bold(`کل: ${results.length}`)}`,
+    `  ${c.green(`Usable: ${usableAll.length}`)}` +
+      `   |  ${c.yellow(`Free: ${freeModels.length}`)}` +
+      `   |  ${c.bold(`Total: ${results.length}`)}`,
   );
 
-  if (freeUsable.length) {
-    console.log(c.bold('\n  مدل‌های رایگانِ قابل استفاده:'));
-    for (const r of freeUsable) console.log(`    ${c.green('✓')} ${r.model}`);
+  const ranked = usableAll
+    .filter((r) => r.bench?.score !== null && r.bench?.score !== undefined)
+    .sort((a, b) => (b.bench?.score ?? 0) - (a.bench?.score ?? 0));
+
+  if (ranked.length) {
+    console.log(c.bold('\n  Best models by benchmark score:'));
+    for (const r of ranked.slice(0, 10)) {
+      const free = r.free === true ? c.green(' [FREE]') : '';
+      const score = benchText(r.bench);
+      console.log(
+        `    ${padVisible(score, 6)}  ${r.model}${free}` + c.dim(`  ${Math.round(r.latencyMs)}ms`),
+      );
+    }
   }
-  const paidUsable = results.filter(
-    (r) => (r.status === 'ok' || r.status === 'ratelimit') && r.free === false,
-  );
+
+  if (freeUsable.length) {
+    console.log(c.bold('\n  Free + usable models:'));
+    for (const r of freeUsable) console.log(`    ${c.green('+')} ${r.model}`);
+  }
+  const paidUsable = usableAll.filter((r) => r.free === false);
   if (paidUsable.length) {
-    console.log(c.bold('\n  مدل‌های پولیِ قابل استفاده:'));
-    for (const r of paidUsable) console.log(`    ${c.blue('•')} ${r.model}`);
+    console.log(c.bold('\n  Paid + usable models:'));
+    for (const r of paidUsable) console.log(`    ${c.blue('*')} ${r.model}`);
   }
 }
 
@@ -187,7 +224,7 @@ export class Progress {
 /**
  * پرسش متنی.
  * در حالت TTY از readline (با پشتیبانی از ویرایش خط) و در حالت pipe
- * از یک خواننده‌ی خطی ساده استفاده می‌شود تا ورودی لوله‌شده هم درست خوانده شود.
+ * از یک خواننده‌ی خطی ساده استفاده می‌شود.
  */
 let ttyRl: ReturnType<typeof createInterface> | undefined;
 const queuedLines: string[] = [];
@@ -279,22 +316,6 @@ export function askSecret(question: string): Promise<string> {
       resolve(answer.trim());
     });
 
-    // بعد از نمایش prompt، ورودی کاربر پنهان شود
     muted = true;
   });
-}
-
-/** انتخاب از یک لیست */
-export async function select<T extends { label: string }>(
-  question: string,
-  options: T[],
-): Promise<T | undefined> {
-  console.log(c.bold(`\n${question}`));
-  options.forEach((opt, i) => {
-    console.log(`  ${c.cyan(String(i + 1))}) ${opt.label}`);
-  });
-  const answer = await ask(c.dim(`  انتخاب [1-${options.length}]: `), '1');
-  const index = Number.parseInt(answer, 10);
-  if (Number.isNaN(index) || index < 1 || index > options.length) return undefined;
-  return options[index - 1];
 }

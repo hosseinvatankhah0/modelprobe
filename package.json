@@ -1,6 +1,6 @@
 {
   "name": "modelprober",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Probe any LLM API (OpenAI-compatible, Anthropic, Gemini) with a key: find out which models actually respond, and which ones are free.",
   "keywords": [
     "openai",
@@ -46,7 +46,7 @@
     "node": ">=18.0.0"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node scripts/copy-data.js",
     "watch": "tsc -p tsconfig.json --watch",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "prepublishOnly": "npm run clean && npm run build",
