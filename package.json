@@ -1,0 +1,59 @@
+{
+  "name": "modelprobe",
+  "version": "0.1.0",
+  "description": "Probe any LLM API (OpenAI-compatible, Anthropic, Gemini) with a key: find out which models actually respond, and which ones are free.",
+  "keywords": [
+    "openai",
+    "anthropic",
+    "gemini",
+    "llm",
+    "models",
+    "api",
+    "cli",
+    "free",
+    "probe",
+    "openrouter",
+    "deepseek",
+    "groq"
+  ],
+  "homepage": "https://github.com/hosseinvatankhah0/modelprobe#readme",
+  "bugs": {
+    "url": "https://github.com/hosseinvatankhah0/modelprobe/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hosseinvatankhah0/modelprobe.git"
+  },
+  "license": "MIT",
+  "author": "hossein <ho3ein.vatankhah@gmail.com>",
+  "type": "module",
+  "bin": {
+    "modelprobe": "dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -p tsconfig.json --watch",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "prepublishOnly": "npm run clean && npm run build",
+    "test": "npm run build && node --test \"test/**/*.test.js\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
+  }
+}

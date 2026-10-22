@@ -1,0 +1,21 @@
+node_modules/
+dist/
+*.tgz
+coverage/
+
+# گزارش‌ها
+reports/
+.python/reports/
+
+# کلیدها و تنظیمات محلی
+keys.local.json
+providers.local.json
+.env
+.env.*
+*.local.json
+
+__pycache__/
+*.pyc
+*.log
+.DS_Store
+Thumbs.db
