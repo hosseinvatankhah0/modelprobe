@@ -2,7 +2,7 @@
 
 > **Probe any LLM API with a key — find out which models actually respond, and which ones are free.**
 
-[![npm](https://img.shields.io/npm/v/modelprobe)](https://www.npmjs.com/package/modelprobe)
+[![npm](https://img.shields.io/npm/v/modelprober)](https://www.npmjs.com/package/modelprober)
 [![license](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
 [![node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)](./package.json)
 
@@ -23,9 +23,9 @@ xAI, Cerebras, SiliconFlow, Moonshot, GLM, Qwen, OneAPI/NewAPI, vLLM, Ollama, LM
 ## Install
 
 ```bash
-npm i -g modelprobe
+npm i -g modelprober
 # یا بدون نصب:
-npx modelprobe
+npx modelprober
 ```
 
 Requires Node.js 18+. No runtime dependencies.
@@ -37,7 +37,7 @@ Requires Node.js 18+. No runtime dependencies.
 ### حالت تعاملی (ساده‌ترین راه)
 
 ```bash
-npx modelprobe
+npx modelprober
 ```
 
 ```
@@ -53,16 +53,16 @@ The API key is read from the terminal **without echoing** it.
 ### با فلگ
 
 ```bash
-npx modelprobe --base-url https://api.deepseek.com --api-key sk-xxx
-npx modelprobe --provider openrouter --free-only
-npx modelprobe --provider openai,deepseek,groq
-npx modelprobe --base-url http://localhost:11434/v1 --api-key ollama
+npx modelprober --base-url https://api.deepseek.com --api-key sk-xxx
+npx modelprober --provider openrouter --free-only
+npx modelprober --provider openai,deepseek,groq
+npx modelprober --base-url http://localhost:11434/v1 --api-key ollama
 ```
 
 ### فقط مدل‌های رایگان
 
 ```bash
-npx modelprobe --provider openrouter --free-only
+npx modelprober --provider openrouter --free-only
 ```
 
 ---
@@ -198,16 +198,16 @@ Every run writes two files to `~/.modelprobe/reports/` (override with `--report-
 ```bash
 # Ollama
 ollama pull llama-3.1-8b
-npx modelprobe --base-url http://localhost:11434/v1 --api-key ollama
+npx modelprober --base-url http://localhost:11434/v1 --api-key ollama
 
 # LM Studio (enable the OpenAI-compatible server)
-npx modelprobe --base-url http://localhost:1234/v1 --api-key lmstudio
+npx modelprober --base-url http://localhost:1234/v1 --api-key lmstudio
 
 # vLLM
-npx modelprobe --base-url http://localhost:8000/v1 --api-key vllm
+npx modelprober --base-url http://localhost:8000/v1 --api-key vllm
 
 # OneAPI / NewAPI / OpenWebUI
-npx modelprobe --base-url http://localhost:3000/v1 --api-key sk-xxx
+npx modelprober --base-url http://localhost:3000/v1 --api-key sk-xxx
 ```
 
 ---
@@ -232,7 +232,7 @@ console.log(report.results.filter((r) => r.status === 'ok'));
 
 ## فارسی (خلاصه)
 
-- `npx modelprobe` → به‌صورت تعاملی آدرس و کلید رو می‌پرسه (کلید پنهان تایپ میشه).
+- `npx modelprober` → به‌صورت تعاملی آدرس و کلید رو می‌پرسه (کلید پنهان تایپ میشه).
 - خروجی جدول: وضعیت هر مدل، اینکه رایگانه یا نه، قیمت هر ۱ میلیون توکن، و زمان پاسخ.
 - فقط مدل‌های `USABLE` و `USABLE*` قابل استفاده‌ان.
 - گزارش JSON/CSV توی `~/.modelprobe/reports/` ذخیره میشه.
@@ -255,3 +255,4 @@ The test suite runs against a local mock OpenAI-compatible server — no API key
 ## License
 
 MIT © [hossein](https://github.com/hosseinvatankhah0)
+

@@ -1,5 +1,5 @@
 {
-  "name": "modelprobe",
+  "name": "modelprober",
   "version": "0.1.0",
   "description": "Probe any LLM API (OpenAI-compatible, Anthropic, Gemini) with a key: find out which models actually respond, and which ones are free.",
   "keywords": [
@@ -28,6 +28,7 @@
   "author": "hossein <ho3ein.vatankhah@gmail.com>",
   "type": "module",
   "bin": {
+    "modelprober": "dist/cli.js",
     "modelprobe": "dist/cli.js"
   },
   "exports": {
