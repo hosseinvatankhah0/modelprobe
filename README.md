@@ -30,6 +30,9 @@ npx modelprober
 
 Requires Node.js 18+. No runtime dependencies.
 
+> **نکته:** اسم پکیج روی npm **`modelprober`** هست (`modelprobe` قبلاً توسط پکیج دیگری رزرو شده بود و npm اسم مشابه رو بلاک می‌کرد).
+> بعد از نصب، هر دو دستور `modelprober` و `modelprobe` کار می‌کنن.
+
 ---
 
 ## Quick start
