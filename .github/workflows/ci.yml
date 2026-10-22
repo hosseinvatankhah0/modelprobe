@@ -32,6 +32,23 @@ jobs:
           node-version: 22
           registry-url: https://registry.npmjs.org
       - run: npm ci
-      - run: npm publish --access public
+      - id: check
+        name: Check publish preconditions
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if [ -z "$NPM_TOKEN" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "NPM_TOKEN secret is not configured - skipping publish."
+          elif npm view modelprober@$VERSION version >/dev/null 2>&1; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "modelprober@$VERSION is already published - skipping."
+          else
+            echo "Publishing modelprober@$VERSION"
+          fi
+      - name: Publish
+        if: steps.check.outputs.skip != 'true'
+        run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
